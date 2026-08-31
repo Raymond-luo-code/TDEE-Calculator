@@ -1,0 +1,5 @@
+{
+  "summary": "A markdown document containing a Mermaid flowchart of the TDEE system architecture, detailing the front-end and back-end boundaries, and outlining specific error prevention (防呆) mechanisms.",
+  "updatedAt": "2026-08-31T03:19:57.766143020Z",
+  "userFacing": true
+}
