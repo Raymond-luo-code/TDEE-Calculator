@@ -147,18 +147,62 @@ with tab_report:
         st.info(f"**☀️ 早餐**：\n\n{meal_plan['早餐']}")
         st.warning(f"**🍱 午餐**：\n\n{meal_plan['午餐']}")
         st.success(f"**🌙 晚餐**：\n\n{meal_plan['晚餐']}")
+        
+        # 建立下載報告內容
+        report_text = f"=== 專屬健康數據報告 ===\n"
+        report_text += f"基礎代謝率 (BMR): {bmr:.1f} 大卡\n"
+        report_text += f"每日總消耗量 (TDEE): {tdee:.1f} 大卡\n"
+        report_text += f"🎯 每日建議攝取熱量: {macros['target_calories']} 大卡\n\n"
+        report_text += f"[ 營養素分配 ]\n"
+        report_text += f"🍚 碳水化合物: {macros['carbs_g']} g\n"
+        report_text += f"🥩 蛋白質: {macros['protein_g']} g\n"
+        report_text += f"🥑 脂肪: {macros['fat_g']} g\n\n"
+        report_text += f"[ 🍽️ {diet_type} - 三餐食譜 ]\n"
+        report_text += f"早餐：\n{meal_plan['早餐'].replace('*', '')}\n\n"
+        report_text += f"午餐：\n{meal_plan['午餐'].replace('*', '')}\n\n"
+        report_text += f"晚餐：\n{meal_plan['晚餐'].replace('*', '')}\n"
+        
+        st.divider()
+        st.download_button(
+            label="💾 一鍵下載專屬健康與食譜報告",
+            data=report_text,
+            file_name="TDEE_Meal_Plan.txt",
+            mime="text/plain",
+            type="primary"
+        )
             
     else:
         st.info("👈 請在左側側邊欄輸入資料，並點擊「開始計算」。")
 
 with tab_data:
     st.header("📂 穿戴裝置 CSV 檔案上傳")
-    st.markdown("在這裡，你可以上傳 Apple Watch 或 Garmin 的運動紀錄，我們利用 Pandas 套件來讀取它！")
+    st.markdown("在這裡上傳 Apple Watch 或 Garmin 的運動紀錄 (需包含熱量或步數欄位)，系統將自動幫您推算活動量！")
     uploaded_file = st.file_uploader("上傳您的運動數據 (CSV 格式)", type=["csv"])
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
             st.success("成功讀取檔案！以下是資料預覽：")
             st.dataframe(df.head())
+            
+            # 嘗試尋找熱量相關欄位
+            cal_cols = [c for c in df.columns if 'cal' in c.lower() or '熱量' in c or '消耗' in c]
+            if cal_cols:
+                avg_cal = df[cal_cols[0]].mean()
+                st.info(f"📊 **資料分析結果**：系統偵測到您的每日平均活動消耗約為 **{avg_cal:.1f} 大卡**！")
+                
+                # 自動推算建議
+                if avg_cal < 200:
+                    rec_act = "久坐 (幾乎不運動) [乘數: 1.2]"
+                elif avg_cal < 400:
+                    rec_act = "輕度活動 (每週 1-3 天) [乘數: 1.375]"
+                elif avg_cal < 700:
+                    rec_act = "中度活動 (每週 3-5 天) [乘數: 1.55]"
+                else:
+                    rec_act = "高度活動 (每週 6-7 天) 或 極度活動 [乘數: 1.725+]"
+                    
+                st.success(f"💡 **AI 建議**：根據您的真實數據，建議您在左側側邊欄的活動量選擇：**{rec_act}**")
+            else:
+                st.warning("未能自動識別熱量欄位，請確認 CSV 是否包含 'calories', '熱量' 等欄位。")
+                
         except Exception as e:
             st.error(f"讀取失敗：{e}")
