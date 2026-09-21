@@ -53,11 +53,35 @@ def format_qty(qty, unit):
         res = round(qty, 1)
         return int(res) if res.is_integer() else res
 
-def generate_meal_plan(diet_type, target_calories):
+def generate_meal_plan(diet_type, target_calories, restrictions=None):
     """根據飲食法與目標熱量，從資料庫中隨機挑選食材並動態調整份量"""
+    if restrictions is None:
+        restrictions = []
+        
     scale = target_calories / 1500.0
     # 取得對應飲食法的資料庫，若找不到則預設給均衡飲食
-    db = FOOD_DATABASE.get(diet_type, FOOD_DATABASE["均衡飲食 (Balanced)"])
+    raw_db = FOOD_DATABASE.get(diet_type, FOOD_DATABASE["均衡飲食 (Balanced)"])
+    
+    # 定義過敏與禁忌關鍵字
+    restriction_keywords = {
+        "不吃海鮮": ["鮭魚", "鯛魚", "蝦", "魚"],
+        "不吃牛肉": ["牛"],
+        "不吃豬肉": ["肉絲", "排骨", "培根", "肉醬", "白切肉", "豬"],
+        "堅果過敏": ["堅果", "芝麻"],
+        "乳糖不耐 (不碰乳製品)": ["奶", "優格", "起司", "奶油"]
+    }
+    
+    forbidden_words = []
+    for r in restrictions:
+        forbidden_words.extend(restriction_keywords.get(r, []))
+        
+    def is_allowed(item):
+        return not any(bad_word in item[0] for bad_word in forbidden_words)
+        
+    db = {}
+    for cat, items in raw_db.items():
+        filtered_items = [item for item in items if is_allowed(item)]
+        db[cat] = filtered_items if filtered_items else items # 若全部被過濾，給予保底
     
     # 從資料庫抽出不重複的食材 (肉類、油脂、蔬菜為三餐通用)
     prot_pool = random.sample(db["protein"], min(len(db["protein"]), 3))
@@ -152,6 +176,54 @@ def generate_meal_plan(diet_type, target_calories):
         
     return meals
 
+def generate_exercise_plan(weight, activity_label, goal):
+    """根據體重、活動量與目標，推算具體的運動建議"""
+    
+    # 決定基礎消耗目標
+    target_burn = 200
+    base_steps = 3000
+    if "輕度" in activity_label:
+        base_steps = 5000
+    elif "中度" in activity_label:
+        base_steps = 8000
+    elif "高度" in activity_label:
+        base_steps = 10000
+    elif "極度" in activity_label:
+        base_steps = 12000
+
+    if "輕度" not in activity_label and "久坐" not in activity_label:
+        target_burn = 350  # 有運動習慣的人目標調高
+    
+    if goal == "fat_loss":
+        target_burn += 100  # 減脂期多消耗
+    elif goal == "muscle_gain":
+        target_burn -= 50   # 增肌期不過度消耗熱量
+        
+    # 計算具體指標
+    # 1. 走路步數 (約略公式: 1公斤走1公里消耗0.7大卡，1公里約1400步)
+    extra_walk_steps = int((target_burn / (weight * 0.7)) * 1400 / 100) * 100
+    total_target_steps = base_steps + extra_walk_steps
+    # 將總步數四捨五入到最近的 500 步，看起來更像一個整齊的目標
+    total_target_steps = round(total_target_steps / 500) * 500
+    
+    # 2. 爬樓梯 (1層約 15 階，60公斤爬1層約消耗 2 大卡)
+    stairs_burn_per_flight = 2.0 * (weight / 60.0)
+    flights_of_stairs = int(target_burn / stairs_burn_per_flight)
+    
+    # 3. 慢跑 (1公斤跑1公里約消耗 1 大卡)
+    jog_km = round(target_burn / (weight * 1.0), 1)
+    
+    # 4. 居家高強度間歇 HIIT / 燃脂操 (60公斤每分鐘約消耗 8 大卡)
+    hiit_burn_per_min = 8.0 * (weight / 60.0)
+    hiit_mins = int(target_burn / hiit_burn_per_min)
+    
+    return {
+        "target_burn": target_burn,
+        "option_a": f"每日目標總步數達 **{total_target_steps} 步** (包含日常通勤)，或額外爬 **{flights_of_stairs} 層樓梯**",
+        "option_b": f"每天抽空在家跟做 YouTube 燃脂操或 HIIT **{hiit_mins} 分鐘**，搭配簡單徒手深蹲",
+        "option_c": f"每天去公園或操場慢跑 **{jog_km} 公里**，或切換為快走 (距離需加倍)"
+    }
+
 # --- 1. 網頁標題與設定 ---
 st.set_page_config(page_title="TDEE 計算器", page_icon="💪", layout="wide", initial_sidebar_state="expanded")
 st.title("💪 個人化智慧 TDEE 計算器")
@@ -196,6 +268,10 @@ with st.sidebar:
     goal = goal_options[goal_label]
 
     diet_type = st.selectbox("飲食偏好", options=["均衡飲食 (Balanced)", "地中海飲食 (Mediterranean)", "生酮飲食 (Keto)", "外食族 (Eating Out)"])
+    
+    restrictions = st.multiselect("過敏與飲食禁忌", options=[
+        "不吃海鮮", "不吃牛肉", "不吃豬肉", "堅果過敏", "乳糖不耐 (不碰乳製品)"
+    ])
 
     calculate_btn = st.button("🚀 開始計算", type="primary", use_container_width=True)
 
@@ -242,11 +318,20 @@ with tab_report:
         st.subheader(f"🍽️ {diet_type} - 專屬三餐食譜建議")
         st.markdown(f"為滿足您每日 **{macros['target_calories']} 大卡** 的需求，系統為您動態配置了以下食譜份量：")
         
-        meal_plan = generate_meal_plan(diet_type, macros['target_calories'])
+        meal_plan = generate_meal_plan(diet_type, macros['target_calories'], restrictions)
         
         st.info(f"**☀️ 早餐**：\n\n{meal_plan['早餐']}")
         st.warning(f"**🍱 午餐**：\n\n{meal_plan['午餐']}")
         st.success(f"**🌙 晚餐**：\n\n{meal_plan['晚餐']}")
+        
+        st.divider()
+        st.subheader("🏃‍♂️ 專屬運動與生活建議")
+        exercise_plan = generate_exercise_plan(weight, activity_label, goal)
+        st.markdown(f"為達到您的健康目標，建議您每日可以額外消耗 **{exercise_plan['target_burn']} 大卡**，您可以從以下方案中「擇一」進行：")
+        
+        st.info(f"**🚶 選項 A (微習慣養成)**：{exercise_plan['option_a']}")
+        st.warning(f"**🏠 選項 B (居家運動)**：{exercise_plan['option_b']}")
+        st.success(f"**🌳 選項 C (戶外運動)**：{exercise_plan['option_c']}")
         
         # 建立下載報告內容
         report_text = f"=== 專屬健康數據報告 ===\n"
@@ -260,7 +345,12 @@ with tab_report:
         report_text += f"[ 🍽️ {diet_type} - 三餐食譜 ]\n"
         report_text += f"早餐：\n{meal_plan['早餐'].replace('*', '')}\n\n"
         report_text += f"午餐：\n{meal_plan['午餐'].replace('*', '')}\n\n"
-        report_text += f"晚餐：\n{meal_plan['晚餐'].replace('*', '')}\n"
+        report_text += f"晚餐：\n{meal_plan['晚餐'].replace('*', '')}\n\n"
+        report_text += f"[ 🏃‍♂️ 專屬運動建議 ]\n"
+        report_text += f"目標額外消耗: {exercise_plan['target_burn']} 大卡\n"
+        report_text += f"選項 A (微習慣): {exercise_plan['option_a'].replace('*', '')}\n"
+        report_text += f"選項 B (居家): {exercise_plan['option_b'].replace('*', '')}\n"
+        report_text += f"選項 C (戶外): {exercise_plan['option_c'].replace('*', '')}\n"
         
         st.divider()
         st.download_button(
