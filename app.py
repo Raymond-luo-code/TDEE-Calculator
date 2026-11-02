@@ -1,282 +1,47 @@
 import streamlit as st
-from calculator import calculate_bmr, calculate_tdee, calculate_macros
+import importlib
+import meal_planner
+importlib.reload(meal_planner)
+from calculator import calculate_bmr, calculate_tdee, calculate_macros, calculate_bmi, calculate_water
+from meal_planner import generate_meal_plan, generate_weekly_meal_plan, generate_exercise_plan
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
-import random
-
-# 建立各飲食法的食材資料庫 (品項, 基準份量, 單位)
-FOOD_DATABASE = {
-    "均衡飲食 (Balanced)": {
-        "carbs_breakfast": [("燕麥片", 0.5, "碗"), ("全麥麵包", 2, "片"), ("地瓜", 1, "顆"), ("無糖麥片", 1, "碗"), ("貝果(原味)", 0.5, "個"), ("馬鈴薯", 1, "顆"), ("玉米", 1, "根")],
-        "carbs_main": [("糙米飯", 0.8, "碗"), ("地瓜", 1, "顆"), ("十穀米", 0.8, "碗"), ("蕎麥麵", 1, "碗"), ("紫米飯", 0.8, "碗"), ("南瓜", 1, "碗"), ("五穀飯", 0.8, "碗")],
-        "protein_breakfast": [("水煮蛋", 1.5, "顆"), ("無糖豆漿", 1, "杯"), ("低脂鮮奶", 1, "杯"), ("荷包蛋", 1.5, "顆"), ("優酪乳(無糖)", 1, "杯"), ("茶碗蒸", 1, "碗"), ("低脂起司", 2, "片")],
-        "protein_main": [("烤雞胸肉", 1, "塊"), ("烤鮭魚", 1, "片"), ("滷牛腱", 1, "盤"), ("清蒸鱸魚", 1, "尾"), ("煎豆腐", 1, "塊"), ("豬里肌肉片", 1, "盤"), ("蒜泥白肉(瘦)", 1, "盤"), ("煎鯛魚", 1, "片")],
-        "fat": [("綜合堅果", 1, "小把"), ("酪梨", 0.3, "顆"), ("特級初榨橄欖油", 2, "茶匙"), ("芝麻醬", 2, "茶匙"), ("南瓜子", 1, "小把"), ("核桃", 3, "顆"), ("花生醬", 1, "湯匙")],
-        "veggies": [("燙高麗菜", 1, "碗"), ("綜合生菜沙拉", 1, "大盤"), ("烤櫛瓜", 1, "碗"), ("花椰菜", 1, "碗"), ("炒菠菜", 1, "碗"), ("涼拌木耳", 1, "盤"), ("玉米筍", 1, "碗"), ("秋葵", 1, "盤")],
-        "mixed_breakfast": [("總匯三明治", 1, "份"), ("鮪魚蛋餅", 1, "份"), ("蔬菜起司烤土司", 1, "份"), ("雞肉生菜捲", 1, "份")],
-        "mixed_main": [("健康水煮便當", 1, "個"), ("雞肉生菜沙拉碗", 1, "份"), ("鮭魚壽司", 6, "貫"), ("烤雞腿定食", 1, "份"), ("鮮蝦春捲", 3, "卷"), ("蕎麥冷麵套餐", 1, "份")]
-    },
-    "地中海飲食 (Mediterranean)": {
-        "carbs_breakfast": [("燕麥", 0.5, "碗"), ("全麥麵包", 2, "片"), ("全麥皮塔餅", 1, "片"), ("雜糧吐司", 2, "片")],
-        "carbs_main": [("藜麥", 0.5, "碗"), ("鷹嘴豆", 0.5, "碗"), ("糙米", 0.5, "碗"), ("蒜香義大利麵", 1, "碗"), ("烤馬鈴薯", 1, "顆"), ("紅腰豆", 0.5, "碗")],
-        "protein_breakfast": [("希臘優格", 1, "小碗"), ("水煮蛋", 1.5, "顆"), ("炒蛋", 1.5, "顆"), ("原味優酪乳", 1, "杯")],
-        "protein_main": [("煎鯛魚", 1, "片"), ("烤雞腿排(去皮)", 1, "塊"), ("毛豆", 0.5, "碗"), ("香煎鮭魚", 1, "片"), ("地中海烤蝦", 1, "盤"), ("燉扁豆", 1, "碗"), ("烤鱈魚", 1, "片")],
-        "fat": [("特級初榨橄欖油", 1, "湯匙"), ("無調味綜合堅果", 1, "小把"), ("酪梨", 0.5, "顆"), ("黑橄欖", 5, "顆"), ("杏仁", 1, "小把"), ("奇亞籽", 1, "湯匙")],
-        "veggies": [("番茄酪梨沙拉", 1, "盤"), ("橄欖油大蒜烤蔬菜", 1, "盤"), ("菠菜沙拉", 1, "盤"), ("烤洋蔥與甜椒", 1, "盤"), ("櫛瓜麵", 1, "碗"), ("羽衣甘藍沙拉", 1, "盤")],
-        "mixed_breakfast": [("優格燕麥罐", 1, "份"), ("番茄起司烤麵包", 1, "份"), ("鷹嘴豆泥配皮塔餅", 1, "份")],
-        "mixed_main": [("地中海烤魚餐盤", 1, "份"), ("雞肉皮塔餅(Pita)", 1, "份"), ("海鮮燉藜麥", 1, "份"), ("希臘沙拉配烤雞肉", 1, "份"), ("蔬菜燉鷹嘴豆", 1, "份")]
-    },
-    "生酮飲食 (Keto)": {
-        "carbs_breakfast": [("低碳蒟蒻麵", 1, "份"), ("大黃瓜片", 1, "碗")],
-        "carbs_main": [("花椰菜米", 1, "碗"), ("櫛瓜麵", 1, "大碗"), ("低碳蒟蒻麵", 1, "份"), ("海帶絲", 1, "碗"), ("白蘿蔔", 1, "碗")], # 以極低碳水蔬菜替代主食
-        "protein_breakfast": [("炒蛋", 3, "顆"), ("厚切培根", 2, "片"), ("無糖杏仁奶", 1, "杯"), ("德式香腸", 2, "根")],
-        "protein_main": [("帶皮烤雞腿", 1, "支"), ("肋眼牛排", 1, "塊"), ("香煎鮭魚", 1.5, "片"), ("五花肉片", 1, "盤"), ("烤鯖魚", 1, "尾"), ("煎鴨胸", 1, "片"), ("奶油煎干貝", 1, "盤")],
-        "fat": [("草飼奶油", 1, "湯匙"), ("酪梨", 0.5, "顆"), ("MCT油", 2, "茶匙"), ("起司片", 2, "片"), ("夏威夷豆", 1, "小把"), ("橄欖油", 1, "湯匙"), ("椰子油", 1, "湯匙")],
-        "veggies": [("奶油炒蘑菇", 1, "盤"), ("橄欖油拌菠菜", 1, "盤"), ("奶油烤蘆筍", 1, "把"), ("起司焗烤花椰菜", 1, "碗"), ("蒜香炒青江菜", 1, "盤"), ("培根炒高麗菜", 1, "盤")],
-        "mixed_breakfast": [("培根起司蛋捲", 1, "份"), ("酪梨鮪魚沙拉", 1, "份"), ("防彈咖啡配水煮蛋", 1, "份")],
-        "mixed_main": [("無骨牛小排生菜包", 1, "份"), ("起司烤雞腿排餐", 1, "份"), ("香煎鮭魚配蘆筍", 1, "份"), ("奶油胡椒蝦", 1, "盤"), ("五花肉炒青菜", 1, "份")]
-    },
-    "外食族 (Eating Out)": {
-        "carbs_breakfast": [("吐司", 2, "片"), ("饅頭", 1, "顆"), ("蘿蔔糕", 2, "片"), ("飯糰", 1, "個"), ("鐵板麵", 1, "份"), ("肉包", 1, "顆")],
-        "carbs_main": [("白飯", 0.8, "碗"), ("烏龍麵", 1, "碗"), ("乾麵", 1, "碗"), ("冬粉", 1, "碗"), ("滷肉飯", 1, "碗"), ("粄條", 1, "碗")],
-        "protein_breakfast": [("煎荷包蛋", 2, "顆"), ("茶葉蛋", 2, "顆"), ("豆漿", 1, "杯"), ("火腿片", 2, "片")],
-        "protein_main": [("滷雞腿", 1, "支"), ("白切肉", 1, "盤"), ("煎鯖魚", 1, "片"), ("炸排骨", 1, "塊"), ("蒜泥白肉", 1, "盤"), ("控肉", 1, "塊"), ("滷蛋與豆腐", 1, "份")],
-        "fat": [("炒菜用油", 1, "份"), ("滷汁", 1, "份"), ("沙拉醬", 1, "包"), ("香油", 1, "茶匙")],
-        "veggies": [("燙青菜", 1, "盤"), ("涼拌小黃瓜", 1, "盤"), ("炒高麗菜", 1, "盤"), ("滷海帶", 1, "盤"), ("燙地瓜葉", 1, "盤"), ("生菜沙拉(便利商店)", 1, "盒")],
-        "mixed_breakfast": [("原味蛋餅", 1, "份"), ("火腿三明治", 1, "份"), ("肉鬆飯糰", 1, "個"), ("皮蛋瘦肉粥", 1, "碗"), ("豬肉滿福堡", 1, "個"), ("燒餅油條", 1, "份")],
-        "mixed_main": [("紅燒牛肉麵", 1, "碗"), ("肉絲炒飯", 1, "盤"), ("番茄肉醬義大利麵", 1, "份"), ("水餃", 10, "顆"), ("排骨便當", 1, "個"), ("雞肉飯便當", 1, "個"), ("三寶飯", 1, "份"), ("大麥克套餐", 1, "份")]
-    }
-}
-
-def format_qty(qty, unit):
-    """根據單位自動格式化數字，不可分割的單位強制四捨五入為整數"""
-    discrete_units = ["顆", "片", "塊", "支", "份", "尾", "卷", "個", "貫", "根", "包", "盒", "盤", "碗"]
-    if unit in discrete_units:
-        base = int(qty)
-        frac = qty - base
-        
-        if base == 0:
-            return "1"
-            
-        if frac >= 0.7:
-            return str(base + 1)
-        elif frac >= 0.3:
-            if unit in ["盤", "碗"]:
-                return f"{base} (建議可直接買大份)"
-            else:
-                return f"{base} (💡 若微餓可補充半顆茶葉蛋)"
-        else:
-            return str(base)
-    elif unit == "杯":
-        res = round(qty, 1)
-        res_str = str(int(res)) if res.is_integer() else str(res)
-        ml = int(res * 240)
-        return f"{res_str} (約 {ml} 毫升)"
-    else:
-        res = round(qty, 1)
-        return str(int(res)) if res.is_integer() else str(res)
-
-def generate_meal_plan(diet_type, target_calories, restrictions=None):
-    """根據飲食法與目標熱量，從資料庫中隨機挑選食材並動態調整份量"""
-    if restrictions is None:
-        restrictions = []
-        
-    scale = target_calories / 1500.0
-    # 取得對應飲食法的資料庫，若找不到則預設給均衡飲食
-    raw_db = FOOD_DATABASE.get(diet_type, FOOD_DATABASE["均衡飲食 (Balanced)"])
-    
-    # 定義過敏與禁忌關鍵字
-    restriction_keywords = {
-        "不吃海鮮": ["鮭魚", "鯛魚", "蝦", "魚"],
-        "不吃牛肉": ["牛"],
-        "不吃豬肉": ["肉絲", "排骨", "培根", "肉醬", "白切肉", "豬"],
-        "堅果過敏": ["堅果", "芝麻"],
-        "乳糖不耐 (不碰乳製品)": ["奶", "優格", "起司", "奶油"]
-    }
-    
-    forbidden_words = []
-    for r in restrictions:
-        forbidden_words.extend(restriction_keywords.get(r, []))
-        
-    def is_allowed(item):
-        return not any(bad_word in item[0] for bad_word in forbidden_words)
-        
-    db = {}
-    for cat, items in raw_db.items():
-        filtered_items = [item for item in items if is_allowed(item)]
-        db[cat] = filtered_items if filtered_items else items # 若全部被過濾，給予保底
-    
-    # 蔬菜為三餐通用
-    veg_pool = random.sample(db["veggies"], min(len(db["veggies"]), 3))
-    
-    # 外食族有 80% 機率抽中綜合餐點，一般飲食有 30% 機率
-    mixed_prob = 0.8 if "外食族" in diet_type else 0.3
-    
-    meals = {}
-    meal_names = ["早餐", "午餐", "晚餐"]
-    
-    # 記錄已經用過的午晚餐，避免中餐跟晚餐吃到一樣的
-    used_carbs_main = []
-    used_mixed_main = []
-    
-    for i, meal_name in enumerate(meal_names):
-        is_breakfast = (meal_name == "早餐")
-        
-        # 根據時段決定籤筒
-        carbs_list = db.get("carbs_breakfast", []) if is_breakfast else db.get("carbs_main", [])
-        mixed_list = db.get("mixed_breakfast", []) if is_breakfast else db.get("mixed_main", [])
-        
-        # 如果是正餐，過濾掉今天已經吃過的品項 (防呆機制)
-        if not is_breakfast:
-            avail_carbs = [c for c in carbs_list if c not in used_carbs_main]
-            if not avail_carbs: avail_carbs = carbs_list  # 如果全部都吃過了就重置
-            
-            avail_mixed = [m for m in mixed_list if m not in used_mixed_main]
-            if not avail_mixed: avail_mixed = mixed_list
-        else:
-            avail_carbs = carbs_list
-            avail_mixed = mixed_list
-            
-        # 決定這一餐要吃綜合餐點還是標準拼盤
-        is_mixed_meal = random.random() < mixed_prob and len(avail_mixed) > 0
-        
-        if is_mixed_meal:
-            # 綜合餐點模式
-            mixed_item = random.choice(avail_mixed)
-            if not is_breakfast: 
-                used_mixed_main.append(mixed_item)
-                
-            veg_item = veg_pool[i % len(veg_pool)]
-            mixed_qty = format_qty(mixed_item[1] * scale, mixed_item[2])
-            
-            meal_lines = [
-                f"🍲 綜合主餐：{mixed_item[0]} **{mixed_qty}** {mixed_item[2]}",
-                f"🥬 搭配蔬菜：{veg_item[0]} (隨意吃到飽，確保纖維足夠)"
-            ]
-            meals[meal_name] = "  \n".join(meal_lines)
-            
-        else:
-            # 標準拼盤模式
-            carb = random.choice(avail_carbs)
-            if not is_breakfast: 
-                used_carbs_main.append(carb)
-                
-            avail_prots = raw_db["protein_breakfast"] if is_breakfast else raw_db["protein_main"]
-            # 過濾蛋白質
-            avail_prots = [p for p in avail_prots if is_allowed(p[0])]
-            if not avail_prots:
-                avail_prots = [("低脂鮮奶" if is_breakfast else "烤雞胸肉", 1, "份")] # Fallback
-                
-            prot = random.choice(avail_prots)
-            
-            # 過濾脂肪
-            avail_fats = [f for f in raw_db["fat"] if is_allowed(f[0])]
-            if not avail_fats:
-                avail_fats = [("橄欖油", 1, "份")]
-            fat = random.choice(avail_fats)
-            
-            veg = veg_pool[i % len(veg_pool)]
-            
-            carb_qty = format_qty(carb[1] * scale, carb[2])
-            prot_qty = format_qty(prot[1] * scale, prot[2])
-            fat_qty = format_qty(fat[1] * scale, fat[2])
-            
-            is_cooking_oil = any(k in fat[0] for k in ["油", "奶油", "醬"])
-            
-            # 智能減油機制：如果抽到高脂肉類，自動移除額外油脂
-            high_fat_keywords = ["鮭魚", "牛排", "培根", "帶皮", "白切肉"]
-            is_fatty_protein = any(k in prot[0] for k in high_fat_keywords)
-            
-            if is_fatty_protein:
-                meal_lines = [
-                    f"🌾 主食：{carb[0]} **{carb_qty}** {carb[2]}",
-                    f"🥩 蛋白質：{prot[0]} **{prot_qty}** {prot[2]} (💡 富含油脂，本餐自動減油)",
-                    f"🥬 蔬菜：{veg[0]} (建議水煮/清蒸，隨意吃到飽)"
-                ]
-            else:
-                meal_lines = [
-                    f"🌾 主食：{carb[0]} **{carb_qty}** {carb[2]}",
-                    f"🥩 蛋白質：{prot[0]} **{prot_qty}** {prot[2]}"
-                ]
-                
-                if is_cooking_oil:
-                    meal_lines.append(f"🥬 蔬菜：{veg[0]} (建議搭配 {fat[0]} **{fat_qty}** {fat[2]} 烹調/拌沙拉)")
-                else:
-                    meal_lines.append(f"🥑 優質油脂/點心：{fat[0]} **{fat_qty}** {fat[2]}")
-                    meal_lines.append(f"🥬 蔬菜：{veg[0]} (隨意吃到飽)")
-                
-            meals[meal_name] = "  \n".join(meal_lines)
-        
-    return meals
-
-def generate_exercise_plan(weight, activity_label, goal):
-    """根據體重、活動量與目標，推算具體的運動建議"""
-    
-    # 決定基礎消耗目標
-    target_burn = 200
-    base_steps = 3000
-    if "輕度" in activity_label:
-        base_steps = 5000
-    elif "中度" in activity_label:
-        base_steps = 8000
-    elif "高度" in activity_label:
-        base_steps = 10000
-    elif "極度" in activity_label:
-        base_steps = 12000
-
-    if "輕度" not in activity_label and "久坐" not in activity_label:
-        target_burn = 350  # 有運動習慣的人目標調高
-    
-    if goal == "fat_loss":
-        target_burn += 100  # 減脂期多消耗
-    elif goal == "muscle_gain":
-        target_burn -= 50   # 增肌期不過度消耗熱量
-        
-    # 計算具體指標
-    # 1. 走路步數 (約略公式: 1公斤走1公里消耗0.7大卡，1公里約1400步)
-    extra_walk_steps = int((target_burn / (weight * 0.7)) * 1400 / 100) * 100
-    total_target_steps = base_steps + extra_walk_steps
-    # 加上合理的每日步數上限 (一般人不建議超過 15000 步)
-    total_target_steps = min(total_target_steps, 15000)
-    # 將總步數四捨五入到最近的 500 步，看起來更像一個整齊的目標
-    total_target_steps = round(total_target_steps / 500) * 500
-    
-    # 2. 爬樓梯 (1層樓約 15 階階梯，60公斤爬1層樓約消耗 2 大卡)
-    stairs_burn_per_flight = 2.0 * (weight / 60.0)
-    flights_of_stairs = int(target_burn / stairs_burn_per_flight)
-    # 合理上限：一般人每天爬 20 層樓已經很厲害了
-    flights_of_stairs = min(flights_of_stairs, 20)
-    
-    # 3. 慢跑 (1公斤跑1公里約消耗 1 大卡)
-    jog_km = round(target_burn / (weight * 1.0), 1)
-    
-    # 4. 居家高強度間歇 HIIT / 燃脂操 (60公斤每分鐘約消耗 8 大卡)
-    hiit_burn_per_min = 8.0 * (weight / 60.0)
-    hiit_mins = int(target_burn / hiit_burn_per_min)
-    
-    # 分次完成建議
-    steps_per_session = round(total_target_steps / 3 / 100) * 100  # 分3次，取百位整數
-    stairs_per_session = max(1, round(flights_of_stairs / 3))       # 分3次
-    hiit_per_session = max(5, round(hiit_mins / 2))                 # 分2次
-    jog_per_session = round(jog_km / 2, 1)                          # 分2次
-    
-    return {
-        "target_burn": target_burn,
-        "option_a": f"每日目標總步數達 **{total_target_steps} 步** (包含日常通勤)，或額外爬 **{flights_of_stairs} 層樓** (每層約 15 階)  \n💡 建議分次完成：早中晚各走 **{steps_per_session} 步**，或分 3 次各爬 **{stairs_per_session} 層**",
-        "option_b": f"每天在家跟做 YouTube 燃脂操或 HIIT 共 **{hiit_mins} 分鐘**，搭配簡單徒手深蹲  \n💡 建議分次完成：早晚各做 **{hiit_per_session} 分鐘**，輕鬆無壓力",
-        "option_c": f"每天去公園或操場慢跑 **{jog_km} 公里**，或切換為快走 (距離需加倍)  \n💡 建議分次完成：早晚各跑 **{jog_per_session} 公里**，更容易持之以恆"
-    }
+import datetime
 
 # --- 1. 網頁標題與設定 ---
-st.set_page_config(page_title="TDEE 計算器", page_icon="💪", layout="wide", initial_sidebar_state="expanded")
-st.title("💪 個人化智慧 TDEE 計算器")
-st.markdown("這是一個由 **Raymond** 與 **Andy** 共同開發的健康數據分析系統！")
+st.set_page_config(
+    page_title="個人化智慧 TDEE 計算器與健康生活分析系統",
+    page_icon="💪",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.title("💪 個人化智慧 TDEE 計算器與健康生活分析系統")
+st.markdown("這是一個由 **Raymond** 與 **Andy** 共同開發的健康數據分析與生活型態輔助系統！")
+
+# 科學依據與參考文獻折疊區 (醫學倫理與公衛標準依據)
+with st.expander("📚 本系統之科學依據、演算法與參考文獻 (Scientific References)", expanded=False):
+    st.markdown(r"""
+    本專案致力於將具備同儕審查（Peer-reviewed）之科學公式與公共衛生指引進行數位化實現：
+    
+    1. **基礎代謝率 (BMR) 公式**：
+       - 採用 **Mifflin-St Jeor Formula (1990)**。研究證實此公式相較於傳統 Harris-Benedict 公式，在現代成年人體重評估上具備更高之預測精確度 ($\pm 10\%$ 誤差區間內比例最高)。
+       - 文獻：*Mifflin MD, St Jeor ST, et al. "A new predictive equation for resting energy expenditure in healthy individuals." Am J Clin Nutr. 1990;51(2):241-247.*
+    2. **每日總能量消耗 (TDEE) 與身體活動係數 (PAL)**：
+       - 依據 **聯合國糧農組織 / 世界衛生組織 / 聯合國大學 (FAO/WHO/UNU)** 身體活動水準係數標準 (Physical Activity Level, 1.2 ～ 1.9)。
+    3. **身體質量指數 (BMI) 與健康體位判定**：
+       - 依據 **中華民國衛生福利部國民健康署 (HPA)** 國人健康體位分級指引：過輕 ($<18.5$)、標準 ($18.5 \le \text{BMI} < 24$)、過重 ($24 \le \text{BMI} < 27$)、輕度肥胖 ($27 \le \text{BMI} < 30$)、中度肥胖 ($30 \le \text{BMI} < 35$)、重度肥胖 ($\ge 35$)。
+    4. **巨量營養素與膳食配置**：
+       - 參考衛福部國健署《每日飲食指南手冊》及國際運動營養學會 (ISSN) 之能量與蛋白質攝取指引。
+    """)
+
 st.divider()
 
 # --- 2. 側邊欄 (Sidebar) 輸入區 ---
 with st.sidebar:
     st.header("📝 生理數據設定")
-    gender_input = st.radio("您的性別是？", options=["男生", "女生"], horizontal=True)
+    gender_input = st.radio("您的生理性別是？", options=["男生", "女生"], horizontal=True)
     
     # 雙向同步：滑桿 ↔ 輸入格
     def sync_slider_to_input(slider_key, input_key):
@@ -302,16 +67,22 @@ with st.sidebar:
     weight = st.session_state["weight_n"]
     
     st.divider()
-    st.header("🎯 目標設定")
+    st.header("🎯 生活目標設定")
     
     activity_options = {
         "久坐 (幾乎不運動)": 1.2,
-        "輕度活動 (每週 1-3 天)": 1.375,
-        "中度活動 (每週 3-5 天)": 1.55,
-        "高度活動 (每週 6-7 天)": 1.725,
+        "輕度活動 (每週 1～3 天)": 1.375,
+        "中度活動 (每週 3～5 天)": 1.55,
+        "高度活動 (每週 6～7 天)": 1.725,
         "極度活動 (勞力密集)": 1.9
     }
-    activity_label = st.radio("活動量", options=activity_options.keys())
+    
+    if "activity_choice" not in st.session_state:
+        st.session_state["activity_choice"] = "久坐 (幾乎不運動)"
+        
+    current_act_index = list(activity_options.keys()).index(st.session_state["activity_choice"]) if st.session_state["activity_choice"] in activity_options else 0
+    activity_label = st.radio("活動量水準", options=list(activity_options.keys()), index=current_act_index)
+    st.session_state["activity_choice"] = activity_label
     activity_multiplier = activity_options[activity_label]
     
     goal_options = {
@@ -319,27 +90,45 @@ with st.sidebar:
         "維持 (Maintenance)": "maintenance",
         "增肌 (Muscle Gain)": "muscle_gain"
     }
-    goal_label = st.radio("您的目標", options=goal_options.keys())
+    goal_label = st.radio("健康管理目標", options=list(goal_options.keys()))
     goal = goal_options[goal_label]
 
-    diet_type = st.radio("飲食偏好", options=["均衡飲食 (Balanced)", "地中海飲食 (Mediterranean)", "生酮飲食 (Keto)", "外食族 (Eating Out)"])
+    diet_type = st.radio("日常飲食偏好", options=["均衡飲食 (Balanced)", "地中海飲食 (Mediterranean)", "生酮飲食 (Keto)", "外食族 (Eating Out)"])
     
-    restrictions = st.multiselect("過敏與飲食禁忌", options=[
+    restrictions = st.multiselect("食材過敏與飲食禁忌", options=[
         "不吃海鮮", "不吃牛肉", "不吃豬肉", "堅果過敏", "乳糖不耐 (不碰乳製品)"
     ])
 
-    calculate_btn = st.button("🚀 開始計算", type="primary", use_container_width=True)
+    calculate_btn = st.button("🚀 開始計算健康報告", type="primary", use_container_width=True)
     
     st.divider()
     st.header("⚙️ 顯示設定")
     font_size_label = st.select_slider("字體大小", options=["小", "中", "大", "特大"], value="大")
+    
+    st.divider()
+    # 側邊欄醫療免責聲明 (醒目警示框，倫理合規)
+    st.warning(
+        "⚠️ **醫學倫理與免責聲明 (Disclaimer)**\n\n"
+        "本系統為自主學習專案之生活型態健康數據輔助工具，依據公開公衛文獻推算，"
+        "**非屬醫療診斷，亦不能取代醫師或營養師之專業臨床諮詢**。\n\n"
+        "若有特殊疾病、受傷病史或身體不適，請務必尋求合格醫療專業團隊協助。"
+    )
 
-# --- 全域字體大小設定 ---
+# --- 全域字體大小與樣式設定 ---
 font_size_map = {"小": "14px", "中": "16px", "大": "19px", "特大": "22px"}
 selected_font_size = font_size_map[font_size_label]
 st.markdown(f"""
 <style>
-    /* 主內容區域 — 使用萬用選擇器確保所有文字都被覆蓋 */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
+
+    /* 全站字體全面採用 思源黑體 (Noto Sans TC) 與 Inter */
+    html, body, [class*="css"], [data-testid="stAppViewContainer"], [data-testid="stSidebar"], [data-testid="stMarkdownContainer"], button, input, textarea, select {{
+        font-family: 'Noto Sans TC', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }}
+
+    /* 主內容區域萬用字體調整 */
     [data-testid="stAppViewContainer"] [data-testid="stVerticalBlockBorderWrapper"] p,
     [data-testid="stAppViewContainer"] [data-testid="stVerticalBlockBorderWrapper"] span,
     [data-testid="stAppViewContainer"] [data-testid="stVerticalBlockBorderWrapper"] li,
@@ -348,198 +137,391 @@ st.markdown(f"""
     [data-testid="stAppViewContainer"] [data-testid="stMarkdownContainer"] p,
     [data-testid="stAppViewContainer"] [data-testid="stMarkdownContainer"] span,
     [data-testid="stAppViewContainer"] [data-testid="stMarkdownContainer"] li {{
+        font-family: 'Noto Sans TC', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         font-size: {selected_font_size} !important;
+        line-height: 1.65;
+        letter-spacing: 0.015em;
+    }}
+
+    /* 標題加重字重，提升視覺階層感 */
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: 'Noto Sans TC', 'Inter', sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.02em !important;
     }}
     
-    /* 分頁標籤：加大加粗 */
+    /* 分頁標籤加大加粗 */
     [data-testid="stAppViewContainer"] button[data-baseweb="tab"] {{
+        font-family: 'Noto Sans TC', 'Inter', sans-serif !important;
         font-size: {selected_font_size} !important;
         font-weight: 700 !important;
         padding: 12px 20px !important;
+        letter-spacing: 0.02em !important;
     }}
     
-    /* 選中的分頁標籤加紅色底線高亮 */
     [data-testid="stAppViewContainer"] button[data-baseweb="tab"][aria-selected="true"] {{
         border-bottom: 3px solid #ff4b4b !important;
     }}
 
-    /* 側邊欄維持原始大小 */
+    /* 側邊欄文字固定大小 */
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] div {{
+        font-family: 'Noto Sans TC', 'Inter', sans-serif !important;
         font-size: 14px !important;
+        letter-spacing: 0.01em;
     }}
 </style>
 """, unsafe_allow_html=True)
 
 # --- 3. 主畫面分頁 (Tabs) ---
-tab_report, tab_data = st.tabs(["📊 健康數據報告", "📂 穿戴裝置數據匯入"])
+tab_report, tab_data = st.tabs(["📊 健康數據報告", "📂 穿戴裝置數據分析"])
 
 with tab_report:
     if calculate_btn:
         st.session_state["show_report"] = True
-        # 按下開始計算時，強制重新產生新的食譜
+        # 強制重新產生新的食譜快取
         if "meal_plan" in st.session_state:
             del st.session_state["meal_plan"]
+        if "weekly_plan" in st.session_state:
+            del st.session_state["weekly_plan"]
             
     if st.session_state.get("show_report", False):
+        # 1. 倫理與生理邊界保護：未滿 18 歲青少年保護
         is_youth = age < 18
         actual_goal = "maintenance" if (is_youth and goal == "fat_loss") else goal
             
         gender_en = "male" if gender_input == "男生" else "female"
         bmr = calculate_bmr(gender_en, weight, height, age)
         tdee = calculate_tdee(bmr, activity_multiplier)
-        macros = calculate_macros(tdee, actual_goal)
+        macros = calculate_macros(tdee, actual_goal, diet_type)
+        bmi_data = calculate_bmi(weight, height)
+        water_min, water_max = calculate_water(weight, activity_multiplier, actual_goal)
         
-        st.success("計算成功！以下是您的專屬報告，請點擊下方分頁查看各項建議：")
+        # 2. 生理極端數值安全防護網警示 (Safety Guardrails)
+        min_safe_cal = 1200 if gender_en == "female" else 1500
         
+        # 置頂醒目免責聲明橫幅 (倫理合規最高防線)
+        st.warning(
+            "🛡️ **系統聲明與使用須知 (Disclaimer)**：本報告依據 WHO、ACSM 與衛福部國健署之公共衛生常規指引推算，旨在提供日常生活型態與體適能之輔助參考，"
+            "**非屬個別醫療診斷或治療處方，亦不可取代醫師或營養師之臨床診療**。若有慢性病、受傷病史、孕哺期或急性不適，請務必尋求合格醫療專業團隊評估。"
+        )
+        
+        st.success("✅ 計算成功！以下為依據公共衛生科學模型推算之生活型態健康分析報告：")
+        
+        # 醫療安全防護警示區塊
         if is_youth:
-            st.warning("⚠️ **青少年發育期提醒**：您目前未滿 18 歲，發育期間強烈不建議進行節食或熱量赤字。系統已將您的目標自動調整為「充足營養配置」，請著重於均衡飲食與規律運動！")
-        
-        # 預先產生資料，供各分頁共用
+            st.warning("⚠️ **青少年發育期保護提醒**：您目前未滿 18 歲，發育成長期間強烈不建議進行熱量赤字或節食。系統已將您的目標自動切換為「充足營養配置」，請著重於均衡營養與規律睡眠！")
+            
+        if macros['target_calories'] < bmr or macros['target_calories'] < min_safe_cal:
+            st.error(
+                f"⚠️ **生理代謝安全警示**：您當前的目標建議熱量（**{macros['target_calories']} 大卡**）"
+                f"已低於基礎代謝率 (BMR: {bmr:.1f} 大卡) 或人體最低生理安全底線 ({min_safe_cal} 大卡)。"
+                "長期熱量赤字過大易引發基礎代謝適應性下降、肌肉損耗及甲狀腺/性腺荷爾蒙紊亂。強烈建議每日攝取不低於 BMR，或在合格營養師監督下進行。"
+            )
+            
+        if bmi_data["bmi"] < 16.0 or bmi_data["bmi"] >= 35.0:
+            st.error(
+                f"🚨 **極端體位安全警示**：您的 BMI 為 **{bmi_data['bmi']}** ({bmi_data['status']})，已超出一般日常健康促進工具之建議範疇。"
+                "強烈建議優先至大醫院之新陳代謝科或體重管理門診，由跨專科臨床醫師與營養師團隊進行深入生理評估。"
+            )
+
+        # 預先生成食譜資料快取
         if "meal_plan" not in st.session_state:
             st.session_state["meal_plan"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)
         exercise_plan = generate_exercise_plan(weight, activity_label, actual_goal)
         
-        # 將報告拆成三個子分頁，讓每項建議都是同等地位
-        sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📊 數據總覽", "🍽️ 飲食建議", "🏃‍♂️ 運動建議"])
+        # 報告子分頁
+        sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📊 生理數據總覽", "🍽️ 日常飲食搭配參考", "🏃‍♂️ 日常活動量建議"])
         
         with sub_tab1:
-            # 數字卡片
-            col_res1, col_res2, col_res3 = st.columns(3)
+            st.subheader("💡 核心生理指標分析")
+            
+            # 第一列：BMI、健康體位判定與理想體重
+            col_b1, col_b2, col_b3 = st.columns(3)
+            col_b1.metric(label="身體質量指數 (BMI)", value=f"{bmi_data['bmi']}")
+            col_b2.metric(label="健康體位判定 (衛福部標準)", value=f"{bmi_data['status']}")
+            col_b3.metric(label="身高理想體重區間", value=f"{bmi_data['ideal_min']} ～ {bmi_data['ideal_max']} kg")
+            
+            st.caption(f"ℹ️ **體位衛教說明**：{bmi_data['advice']}")
+            st.divider()
+            
+            # 第二列：BMR, TDEE, 目標熱量與水分
+            col_res1, col_res2, col_res3, col_res4 = st.columns(4)
             col_res1.metric(label="基礎代謝率 (BMR)", value=f"{bmr:.1f} 大卡")
             col_res2.metric(label="每日總消耗量 (TDEE)", value=f"{tdee:.1f} 大卡")
             col_res3.metric(label="🎯 每日建議攝取熱量", value=f"{macros['target_calories']} 大卡")
+            glasses_approx = round(water_min / 250)
+            col_res4.metric(label="💧 每日建議飲水量", value=f"{water_min} ～ {water_max} ml", help=f"約為 {glasses_approx} ～ {glasses_approx+2} 杯馬克杯水量 (以 250ml/杯 計算)。建議定時小口慢飲，茶或黑咖啡不可完全取代純水。")
             
             st.divider()
             
-            # 互動式圖表與營養素詳細數據
+            # 巨量營養素比例與詳細數據
             col_chart, col_details = st.columns([2, 1])
             
             with col_chart:
-                st.subheader("三大營養素比例")
+                st.subheader(f"三大營養素熱量佔比 ({diet_type})")
                 df_macros = pd.DataFrame({
                     "營養素": ["碳水化合物", "蛋白質", "脂肪"],
-                    "克數 (g)": [macros['carbs_g'], macros['protein_g'], macros['fat_g']]
+                    "克數 (g)": [macros['carbs_g'], macros['protein_g'], macros['fat_g']],
+                    "熱量百分比": [f"{macros['carbs_ratio']}%", f"{macros['protein_ratio']}%", f"{macros['fat_ratio']}%"]
                 })
-                fig = px.pie(df_macros, values="克數 (g)", names="營養素", hole=0.4, 
-                             color_discrete_sequence=['#ff9999', '#66b3ff', '#99ff99'])
+                fig = px.pie(
+                    df_macros,
+                    values="克數 (g)",
+                    names="營養素",
+                    hole=0.42,
+                    hover_data=["熱量百分比"],
+                    color="營養素",
+                    color_discrete_map={"碳水化合物": "#ff7675", "蛋白質": "#74b9ff", "脂肪": "#55efc4"}
+                )
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(margin=dict(t=20, b=20, l=10, r=10))
                 st.plotly_chart(fig, use_container_width=True)
                 
             with col_details:
-                st.subheader("營養素詳細數據")
-                st.metric(label="🍚 碳水化合物", value=f"{macros['carbs_g']} g")
-                st.metric(label="🥩 蛋白質", value=f"{macros['protein_g']} g")
-                st.metric(label="🥑 脂肪", value=f"{macros['fat_g']} g")
+                st.subheader("營養素詳細克數")
+                st.metric(label=f"🍚 碳水化合物 ({macros['carbs_ratio']}%)", value=f"{macros['carbs_g']} g")
+                st.metric(label=f"🥩 蛋白質 ({macros['protein_ratio']}%)", value=f"{macros['protein_g']} g")
+                st.metric(label=f"🥑 脂肪 ({macros['fat_ratio']}%)", value=f"{macros['fat_g']} g")
+                
+                if "生酮" in diet_type:
+                    st.caption("💡 **生酮飲食模式**：大幅限制碳水化合物至 10% 以下，提高健康優質油脂以促使身體運用酮體供能。")
+                elif "地中海" in diet_type:
+                    st.caption("💡 **地中海飲食模式**：著重未精製全穀、深海魚類優質蛋白與初榨橄欖油好油。")
         
         with sub_tab2:
-            st.subheader(f"🍽️ {diet_type} - 專屬三餐食譜建議")
-            st.markdown(f"為滿足您每日 **{macros['target_calories']} 大卡** 的需求，系統為您動態配置了以下食譜份量：")
+            st.subheader(f"🍽️ {diet_type} ｜ 日常生活菜單搭配參考")
+            st.markdown(f"為滿足您每日約 **{macros['target_calories']} 大卡** 的熱量目標，系統為您動態配置了以下菜單分量：")
             
             if is_youth:
-                st.info("💡 **發育期加碼建議**：每天建議額外攝取 1~2 杯牛奶（或無糖豆漿），以確保充足的鈣質與優質蛋白幫助長高！")
+                st.info("💡 **發育期加碼建議**：每天建議額外攝取 1～2 杯牛奶（或無糖豆漿），以確保充足的鈣質與優質蛋白幫助骨骼成長！")
+                
+            plan_mode = st.radio("菜單顯示模式", ["📅 今日三餐搭配 (可個別換菜)", "🗓️ 一週七天菜單 (週一至週日)"], horizontal=True)
             
-            # 早餐
-            col_b_btn, col_b_text = st.columns([1, 6])
-            with col_b_btn:
-                if st.button("🔄 換早餐", use_container_width=True):
-                    st.session_state["meal_plan"]["早餐"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)["早餐"]
-            with col_b_text:
-                st.info(f"**☀️ 早餐**：\n\n{st.session_state['meal_plan']['早餐']}")
-                
-            # 午餐
-            col_l_btn, col_l_text = st.columns([1, 6])
-            with col_l_btn:
-                if st.button("🔄 換午餐", use_container_width=True):
-                    st.session_state["meal_plan"]["午餐"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)["午餐"]
-            with col_l_text:
-                st.warning(f"**🍱 午餐**：\n\n{st.session_state['meal_plan']['午餐']}")
-                
-            # 晚餐
-            col_d_btn, col_d_text = st.columns([1, 6])
-            with col_d_btn:
-                if st.button("🔄 換晚餐", use_container_width=True):
-                    st.session_state["meal_plan"]["晚餐"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)["晚餐"]
-            with col_d_text:
-                st.success(f"**🌙 晚餐**：\n\n{st.session_state['meal_plan']['晚餐']}")
+            if "今日三餐搭配" in plan_mode:
+                # 早餐
+                col_b_btn, col_b_text = st.columns([1, 6])
+                with col_b_btn:
+                    if st.button("🔄 換早餐", use_container_width=True):
+                        st.session_state["meal_plan"]["早餐"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)["早餐"]
+                        st.rerun()
+                with col_b_text:
+                    st.info(f"**☀️ 早餐**：\n\n{st.session_state['meal_plan']['早餐']}")
+                    
+                # 午餐
+                col_l_btn, col_l_text = st.columns([1, 6])
+                with col_l_btn:
+                    if st.button("🔄 換午餐", use_container_width=True):
+                        st.session_state["meal_plan"]["午餐"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)["午餐"]
+                        st.rerun()
+                with col_l_text:
+                    st.warning(f"**🍱 午餐**：\n\n{st.session_state['meal_plan']['午餐']}")
+                    
+                # 晚餐
+                col_d_btn, col_d_text = st.columns([1, 6])
+                with col_d_btn:
+                    if st.button("🔄 換晚餐", use_container_width=True):
+                        st.session_state["meal_plan"]["晚餐"] = generate_meal_plan(diet_type, macros['target_calories'], restrictions)["晚餐"]
+                        st.rerun()
+                with col_d_text:
+                    st.success(f"**🌙 晚餐**：\n\n{st.session_state['meal_plan']['晚餐']}")
+            else:
+                # 一週七天菜單模式
+                if st.button("🔄 重新配置整週七天菜單", type="secondary"):
+                    st.session_state["weekly_plan"] = generate_weekly_meal_plan(diet_type, macros['target_calories'], restrictions)
+                    st.rerun()
+                    
+                if "weekly_plan" not in st.session_state:
+                    st.session_state["weekly_plan"] = generate_weekly_meal_plan(diet_type, macros['target_calories'], restrictions)
+                    
+                week_tabs = st.tabs(list(st.session_state["weekly_plan"].keys()))
+                for w_tab, day_name in zip(week_tabs, st.session_state["weekly_plan"].keys()):
+                    with w_tab:
+                        day_meals = st.session_state["weekly_plan"][day_name]
+                        st.markdown(f"#### 📅 {day_name} 菜單規劃")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.info(f"**☀️ 早餐**\n\n{day_meals['早餐']}")
+                        with col2:
+                            st.warning(f"**🍱 午餐**\n\n{day_meals['午餐']}")
+                        with col3:
+                            st.success(f"**🌙 晚餐**\n\n{day_meals['晚餐']}")
+            
+            # 一鍵複製今日菜單功能 (使用 st.code 內建之複製按鈕)
+            st.divider()
+            st.markdown("📋 **一鍵複製今日菜單文字 (點擊程式碼區塊右上角圖標即可快速複製，方便傳至 LINE 或筆記)**：")
+            copy_content = (
+                f"【{diet_type} 今日健康菜單 ｜ 目標 {macros['target_calories']} kcal】\n"
+                f"☀️ 早餐：\n{st.session_state['meal_plan']['早餐'].replace('*', '')}\n\n"
+                f"🍱 午餐：\n{st.session_state['meal_plan']['午餐'].replace('*', '')}\n\n"
+                f"🌙 晚餐：\n{st.session_state['meal_plan']['晚餐'].replace('*', '')}\n\n"
+                f"💧 今日建議飲水量：{water_min} ～ {water_max} ml\n"
+                f"⚠️ 本內容僅供自主健康管理生活參考，非醫療處方。"
+            )
+            st.code(copy_content, language="markdown")
         
         with sub_tab3:
-            st.subheader("🏃‍♂️ 專屬運動與生活建議")
-            st.markdown(f"為達到您的健康目標，建議您每日可以額外消耗 **{exercise_plan['target_burn']} 大卡**，您可以從以下方案中「擇一」進行：")
+            st.subheader("🏃‍♂️ 日常活動量與生活處方 (WHO / ACSM 實證指引)")
+            st.markdown(
+                "💡 **運動醫學核心原則**：體態與體重控制中，能量赤字 **80% 取決於飲食管理，20% 來自運動調節**。"
+                "運動的核心價值在於**刺激心肺適能、提升最大攝氧量 ($VO_2\\max$)、維持瘦肉組織（防止代謝適應衰退）**，而非盲目線性抵銷熱量。"
+                "國際運動醫學會強烈建議將以下三大生活處方融入每週規劃："
+            )
             
             if is_youth:
-                st.info("💡 **青少年專屬運動建議**：除了下方的日常活動外，強烈建議多做「跳繩、打籃球」等縱向跳躍運動，刺激生長板幫助長高！")
+                st.info("💡 **青少年體適能加碼建議**：除了日常步數外，強烈建議每週安排「跳繩、打籃球」等縱向跳躍活動，促進生長板物理刺激！")
 
-            st.info(f"**🚶 選項 A (微習慣養成)**：{exercise_plan['option_a']}")
-            st.warning(f"**🏠 選項 B (居家運動)**：{exercise_plan['option_b']}")
-            st.success(f"**🌳 選項 C (戶外運動)**：{exercise_plan['option_c']}")
+            st.info(f"**🚶 模組一：日常微活動量 (NEAT ｜ 步數甜蜜點與少坐多動)**  \n{exercise_plan['option_a']}")
+            st.warning(f"**🏃 模組二：心肺適能連續訓練 (Cardiorespiratory Fitness)**  \n{exercise_plan['option_b']}")
+            st.success(f"**🏋️ 模組三：骨骼肌肉抗阻訓練 (Resistance Training ｜ 守住代謝)**  \n{exercise_plan['option_c']}")
         
-        # 下載報告（放在分頁外面，任何分頁都看得到）
+        # 下載報告區塊
         st.divider()
         
-        # 建立下載報告內容
-        report_text = f"=== 專屬健康數據報告 ===\n"
+        report_text = f"=== 個人化智慧健康與生活數據分析報告 ===\n"
+        report_text += f"【醫學倫理與免責聲明】\n"
+        report_text += f"本報告由自主學習專案系統自動生成，所有數值與建議均依據公開公衛文獻推算，\n"
+        report_text += f"非屬醫療診斷或治療處方，亦不能替代合格醫師或執業營養師之專業臨床諮詢。\n"
+        report_text += f"若有特殊生理狀況、受傷病史或身體不適，請務必尋求醫療專業人員協助。\n\n"
+        report_text += f"[ 生理指標評估 ]\n"
+        report_text += f"身體質量指數 (BMI): {bmi_data['bmi']} ({bmi_data['status']})\n"
+        report_text += f"理想體重區間: {bmi_data['ideal_min']} ～ {bmi_data['ideal_max']} kg\n"
         report_text += f"基礎代謝率 (BMR): {bmr:.1f} 大卡\n"
         report_text += f"每日總消耗量 (TDEE): {tdee:.1f} 大卡\n"
-        report_text += f"🎯 每日建議攝取熱量: {macros['target_calories']} 大卡\n\n"
-        report_text += f"[ 營養素分配 ]\n"
-        report_text += f"🍚 碳水化合物: {macros['carbs_g']} g\n"
-        report_text += f"🥩 蛋白質: {macros['protein_g']} g\n"
-        report_text += f"🥑 脂肪: {macros['fat_g']} g\n\n"
-        report_text += f"[ 🍽️ {diet_type} - 三餐食譜 ]\n"
+        report_text += f"🎯 每日建議攝取熱量: {macros['target_calories']} 大卡\n"
+        report_text += f"💧 每日建議飲水量: {water_min} ～ {water_max} 毫升\n\n"
+        report_text += f"[ 營養素目標分配 ({diet_type}) ]\n"
+        report_text += f"🍚 碳水化合物 ({macros['carbs_ratio']}%): {macros['carbs_g']} g\n"
+        report_text += f"🥩 蛋白質 ({macros['protein_ratio']}%): {macros['protein_g']} g\n"
+        report_text += f"🥑 脂肪 ({macros['fat_ratio']}%): {macros['fat_g']} g\n\n"
+        report_text += f"[ 🍽️ 三餐搭配參考 ]\n"
         report_text += f"早餐：\n{st.session_state['meal_plan']['早餐'].replace('*', '')}\n\n"
         report_text += f"午餐：\n{st.session_state['meal_plan']['午餐'].replace('*', '')}\n\n"
         report_text += f"晚餐：\n{st.session_state['meal_plan']['晚餐'].replace('*', '')}\n\n"
-        report_text += f"[ 🏃‍♂️ 專屬運動建議 ]\n"
-        report_text += f"目標額外消耗: {exercise_plan['target_burn']} 大卡\n"
-        report_text += f"選項 A (微習慣): {exercise_plan['option_a'].replace('*', '')}\n"
-        report_text += f"選項 B (居家): {exercise_plan['option_b'].replace('*', '')}\n"
-        report_text += f"選項 C (戶外): {exercise_plan['option_c'].replace('*', '')}\n"
+        report_text += f"[ 🏃‍♂️ 日常活動量與生活處方 (WHO / ACSM 實證指引) ]\n"
+        report_text += f"醫學核心: 80%靠飲食管理，運動著重改善心肺適能與維持瘦肉組織防代謝衰退\n\n"
+        report_text += f"模組一 (日常微活動 NEAT):\n{exercise_plan['option_a'].replace('*', '')}\n\n"
+        report_text += f"模組二 (心肺適能連續訓練):\n{exercise_plan['option_b'].replace('*', '')}\n\n"
+        report_text += f"模組三 (骨骼肌肉抗阻訓練):\n{exercise_plan['option_c'].replace('*', '')}\n"
         
         st.download_button(
-            label="💾 一鍵下載專屬健康與食譜報告",
+            label="💾 一鍵下載專屬健康與飲食分析報告 (.txt)",
             data=report_text,
-            file_name="TDEE_Meal_Plan.txt",
+            file_name="Personal_Health_Report.txt",
             mime="text/plain",
             type="primary"
         )
             
     else:
         st.info(
-            "👈 請在左側側邊欄輸入資料，並點擊「開始計算」。\n\n"
-            "📱 **手機版用戶小提醒**：如果沒有看到輸入框，請點擊畫面左上角的 **`>` 箭頭符號**，就能打開隱藏的選單囉！"
+            "👈 請在左側側邊欄輸入生理數值與目標，並點擊「🚀 開始計算健康報告」。\n\n"
+            "📱 **手機端用戶貼心小提醒**：若未看見輸入選單，請點擊畫面左上角的 **`>` 箭頭符號**，即可展開側邊欄填寫資料！"
         )
 
 with tab_data:
-    st.header("📂 穿戴裝置 CSV 檔案上傳")
-    st.markdown("在這裡上傳 Apple Watch 或 Garmin 的運動紀錄 (需包含熱量或步數欄位)，系統將自動幫您推算活動量！")
-    uploaded_file = st.file_uploader("上傳您的運動數據 (CSV 格式)", type=["csv"])
-    if uploaded_file is not None:
+    st.header("📂 穿戴式裝置數據分析 (Wearable Data Analytics)")
+    st.markdown(
+        "本模組支援匯入 Apple Watch 或 Garmin 之每日運動與體適能紀錄 (CSV 格式)，"
+        "系統將以真實活動消耗自動校正活動量係數，取代傳統粗估填答！"
+    )
+    
+    col_demo, col_blank = st.columns([2, 5])
+    with col_demo:
+        load_sample = st.button("💡 快速體驗：載入 Apple Watch 7 天範例數據", use_container_width=True)
+        
+    uploaded_file = st.file_uploader("上傳您的個人運動數據 (CSV 格式)", type=["csv"])
+    
+    df = None
+    if load_sample:
+        # 生成擬真 7 天 Apple Watch 數據
+        today = datetime.date.today()
+        dates = [(today - datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+        sample_data = {
+            "Date": dates,
+            "Active_Calories (kcal)": [420, 560, 310, 480, 620, 510, 450],
+            "Total_Steps (步)": [8400, 10200, 6300, 9100, 11800, 9900, 8800],
+            "Exercise_Minutes (分鐘)": [35, 52, 25, 45, 60, 48, 40],
+            "Avg_Heart_Rate (bpm)": [118, 132, 110, 126, 138, 129, 122]
+        }
+        df = pd.DataFrame(sample_data)
+        st.session_state["loaded_sample_df"] = df
+        st.success("✅ 已成功載入 Apple Watch 7 日擬真運動數據！")
+    elif "loaded_sample_df" in st.session_state and uploaded_file is None:
+        df = st.session_state["loaded_sample_df"]
+    elif uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
-            st.success("成功讀取檔案！以下是資料預覽：")
-            st.dataframe(df.head())
-            
-            # 嘗試尋找熱量相關欄位
-            cal_cols = [c for c in df.columns if 'cal' in c.lower() or '熱量' in c or '消耗' in c]
-            if cal_cols:
-                avg_cal = df[cal_cols[0]].mean()
-                st.info(f"📊 **資料分析結果**：系統偵測到您的每日平均活動消耗約為 **{avg_cal:.1f} 大卡**！")
-                
-                # 自動推算建議
-                if avg_cal < 200:
-                    rec_act = "久坐 (幾乎不運動) [乘數: 1.2]"
-                elif avg_cal < 400:
-                    rec_act = "輕度活動 (每週 1-3 天) [乘數: 1.375]"
-                elif avg_cal < 700:
-                    rec_act = "中度活動 (每週 3-5 天) [乘數: 1.55]"
-                else:
-                    rec_act = "高度活動 (每週 6-7 天) 或 極度活動 [乘數: 1.725+]"
-                    
-                st.success(f"💡 **AI 建議**：根據您的真實數據，建議您在左側側邊欄的活動量選擇：**{rec_act}**")
-            else:
-                st.warning("未能自動識別熱量欄位，請確認 CSV 是否包含 'calories', '熱量' 等欄位。")
-                
+            st.success("✅ 成功讀取上傳檔案！")
         except Exception as e:
             st.error(f"讀取失敗：{e}")
+            
+    if df is not None:
+        st.markdown("### 📋 數據預覽")
+        st.dataframe(df, use_container_width=True)
+        
+        # 尋找熱量與步數相關欄位
+        cal_cols = [c for c in df.columns if any(k in c.lower() for k in ['cal', '熱量', '消耗', 'active'])]
+        step_cols = [c for c in df.columns if any(k in c.lower() for k in ['step', '步數', '步'])]
+        date_cols = [c for c in df.columns if any(k in c.lower() for k in ['date', 'day', '日期', '時間'])]
+        
+        if cal_cols:
+            cal_col = cal_cols[0]
+            avg_cal = float(df[cal_col].mean())
+            max_cal = float(df[cal_col].max())
+            min_cal = float(df[cal_col].min())
+            
+            # 指標卡片
+            m_col1, m_col2, m_col3 = st.columns(3)
+            m_col1.metric("每日平均活動消耗", f"{avg_cal:.1f} 大卡")
+            m_col2.metric("單日最高活動消耗", f"{max_cal:.1f} 大卡")
+            m_col3.metric("單日最低活動消耗", f"{min_cal:.1f} 大卡")
+            
+            # 7 天活動走勢圖 (Plotly 折線圖 + 平均基準線)
+            x_axis = df[date_cols[0]] if date_cols else df.index
+            fig_trend = go.Figure()
+            fig_trend.add_trace(go.Bar(
+                x=x_axis,
+                y=df[cal_col],
+                name="每日活動熱量 (kcal)",
+                marker_color="#ff7675"
+            ))
+            fig_trend.add_hline(
+                y=avg_cal,
+                line_dash="dash",
+                line_color="#0984e3",
+                annotation_text=f"7 日平均線: {avg_cal:.1f} kcal",
+                annotation_position="bottom right"
+            )
+            fig_trend.update_layout(
+                title="📈 每日活動能量消耗走勢與基準線",
+                xaxis_title="日期",
+                yaxis_title="活動消耗 (kcal)",
+                margin=dict(t=40, b=20, l=10, r=10)
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+            
+            # 自動推算建議活動量級距
+            if avg_cal < 200:
+                rec_act_label = "久坐 (幾乎不運動)"
+                rec_desc = "日常活動量偏低，建議從微習慣每日 6000 步開始養成。"
+            elif avg_cal < 400:
+                rec_act_label = "輕度活動 (每週 1～3 天)"
+                rec_desc = "具備基礎日常活動量，建議維持並漸進增加規律運動。"
+            elif avg_cal < 700:
+                rec_act_label = "中度活動 (每週 3～5 天)"
+                rec_desc = "活動量相當充實健康，能有效促進心肺耐力與代謝健康！"
+            else:
+                rec_act_label = "高度活動 (每週 6～7 天)"
+                rec_desc = "高強度體能消耗者，請特別注意補充充足水分與碳水化合物以利恢復。"
+                
+            st.info(f"💡 **AI 數據洞察**：根據您的穿戴裝置紀錄，系統建議活動量等級為：**{rec_act_label}**\n\n*{rec_desc}*")
+            
+            if st.button("⚡ 一鍵套用此活動量至計算機 (自動更新側邊欄設定)", type="primary"):
+                st.session_state["activity_choice"] = rec_act_label
+                st.session_state["show_report"] = True
+                st.toast(f"已自動更新活動量為「{rec_act_label}」！", icon="🎉")
+                st.rerun()
+        else:
+            st.warning("未能從上傳的 CSV 中識別出熱量相關欄位（例如：Calories、熱量、Active_Calories），請確認檔案格式。")

@@ -49,14 +49,14 @@ def collect_user_data():
         
     print("\n--- 請選擇您的活動量 ---")
     print("1. 久坐 (幾乎不運動)")
-    print("2. 輕度活動 (每週運動 1-3 天)")
-    print("3. 中度活動 (每週運動 3-5 天)")
-    print("4. 高度活動 (每週運動 6-7 天)")
+    print("2. 輕度活動 (每週運動 1～3 天)")
+    print("3. 中度活動 (每週運動 3～5 天)")
+    print("4. 高度活動 (每週運動 6～7 天)")
     print("5. 極度活動 (勞力密集)")
     
     # 用我們寫好的 get_valid_number 來確保他只輸入 1 到 5 的數字
     # 注意：get_valid_number 裡面已經有 while True 了，所以這裡外面不用再包一層 while 迴圈！
-    activity_choice = get_valid_number("請輸入選項 (1-5): ", 1, 5)
+    activity_choice = get_valid_number("請輸入選項 (1～5): ", 1, 5)
     
     # 根據他的選擇，給予對應的活動量乘數
     if activity_choice == 1:
@@ -76,7 +76,7 @@ def collect_user_data():
     print("3. 增肌 (Muscle Gain)")
     
     # 用我們寫好的 get_valid_number 來確保他只輸入 1 到 3 的數字
-    goal_choice = get_valid_number("請輸入選項 (1-3): ", 1, 3)
+    goal_choice = get_valid_number("請輸入選項 (1～3): ", 1, 3)
     
     # 目標不是數字，我們把它轉換成「字串」，方便之後同學 B 拿去判斷
     if goal_choice == 1:
