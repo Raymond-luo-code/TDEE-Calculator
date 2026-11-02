@@ -141,7 +141,7 @@ def generate_meal_plan(diet_type, target_calories, restrictions=None):
             
             meal_lines = [
                 f"綜合餐點：{mixed_item[0]} **{mixed_qty}** {mixed_item[2]}",
-                f"搭配蔬菜：{veg_item[0]} (隨意吃飽，補充豐富膳食纖維)"
+                f"搭配蔬菜：{veg_item[0]} **最低 100 至 150 克** (生重約 1 至 1.5 份，補充豐富膳食纖維)"
             ]
             meals[meal_name] = "  \n".join(meal_lines)
             
@@ -177,7 +177,7 @@ def generate_meal_plan(diet_type, target_calories, restrictions=None):
                 meal_lines = [
                     f"主食：{carb[0]} **{carb_qty}** {carb[2]}",
                     f"蛋白質：{prot[0]} **{prot_qty}** {prot[2]} (富含油脂，建議本餐烹調減油)",
-                    f"蔬菜：{veg[0]} (建議水煮或清蒸，攝取充足纖維)"
+                    f"蔬菜：{veg[0]} **最低 100 至 150 克** (建議水煮或清蒸，攝取充足纖維)"
                 ]
             else:
                 meal_lines = [
@@ -186,10 +186,10 @@ def generate_meal_plan(diet_type, target_calories, restrictions=None):
                 ]
                 
                 if is_cooking_oil:
-                    meal_lines.append(f"蔬菜：{veg[0]} (建議以 {fat[0]} **{fat_qty}** {fat[2]} 烹調/拌沙拉)")
+                    meal_lines.append(f"蔬菜：{veg[0]} **最低 100 至 150 克** (建議以 {fat[0]} **{fat_qty}** {fat[2]} 烹調/拌沙拉)")
                 else:
                     meal_lines.append(f"優質油脂/點心：{fat[0]} **{fat_qty}** {fat[2]}")
-                    meal_lines.append(f"蔬菜：{veg[0]} (隨意吃飽，確保纖維足夠)")
+                    meal_lines.append(f"蔬菜：{veg[0]} **最低 100 至 150 克** (生重約 1 至 1.5 份，確保纖維足夠)")
                 
             meals[meal_name] = "  \n".join(meal_lines)
         
