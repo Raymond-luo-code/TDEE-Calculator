@@ -75,7 +75,7 @@ def format_qty(qty, unit):
         res = round(qty, 1)
         return str(int(res)) if res.is_integer() else str(res)
 
-def generate_meal_plan(diet_type, target_calories, restrictions=None):
+def generate_meal_plan(diet_type, target_calories, restrictions=None, use_emoji=False):
     """根據飲食法與目標熱量，從資料庫中隨機挑選食材並動態調整份量"""
     if restrictions is None:
         restrictions = []
@@ -113,6 +113,13 @@ def generate_meal_plan(diet_type, target_calories, restrictions=None):
     used_carbs_main = []
     used_mixed_main = []
     
+    p_mixed = "🍲 " if use_emoji else ""
+    p_carb = "🌾 " if use_emoji else ""
+    p_prot = "🥩 " if use_emoji else ""
+    p_fat = "🥑 " if use_emoji else ""
+    p_veg = "🥬 " if use_emoji else ""
+    p_idea = "💡 " if use_emoji else ""
+
     for i, meal_name in enumerate(meal_names):
         is_breakfast = (meal_name == "早餐")
         
@@ -140,8 +147,8 @@ def generate_meal_plan(diet_type, target_calories, restrictions=None):
             mixed_qty = format_qty(mixed_item[1] * scale, mixed_item[2])
             
             meal_lines = [
-                f"綜合餐點：{mixed_item[0]} **{mixed_qty}** {mixed_item[2]}",
-                f"搭配蔬菜：{veg_item[0]} **最低 100 至 150 克** (生重約 1 至 1.5 份，補充豐富膳食纖維)"
+                f"{p_mixed}綜合餐點：{mixed_item[0]} **{mixed_qty}** {mixed_item[2]}",
+                f"{p_veg}搭配蔬菜：{veg_item[0]} **最低 100 至 150 克** (生重約 1 至 1.5 份，補充豐富膳食纖維)"
             ]
             meals[meal_name] = "  \n".join(meal_lines)
             
@@ -175,35 +182,35 @@ def generate_meal_plan(diet_type, target_calories, restrictions=None):
             
             if is_fatty_protein:
                 meal_lines = [
-                    f"主食：{carb[0]} **{carb_qty}** {carb[2]}",
-                    f"蛋白質：{prot[0]} **{prot_qty}** {prot[2]} (富含油脂，建議本餐烹調減油)",
-                    f"蔬菜：{veg[0]} **最低 100 至 150 克** (建議水煮或清蒸，攝取充足纖維)"
+                    f"{p_carb}主食：{carb[0]} **{carb_qty}** {carb[2]}",
+                    f"{p_prot}蛋白質：{prot[0]} **{prot_qty}** {prot[2]} ({p_idea}富含油脂，建議本餐烹調減油)",
+                    f"{p_veg}蔬菜：{veg[0]} **最低 100 至 150 克** (建議水煮或清蒸，攝取充足纖維)"
                 ]
             else:
                 meal_lines = [
-                    f"主食：{carb[0]} **{carb_qty}** {carb[2]}",
-                    f"蛋白質：{prot[0]} **{prot_qty}** {prot[2]}"
+                    f"{p_carb}主食：{carb[0]} **{carb_qty}** {carb[2]}",
+                    f"{p_prot}蛋白質：{prot[0]} **{prot_qty}** {prot[2]}"
                 ]
                 
                 if is_cooking_oil:
-                    meal_lines.append(f"蔬菜：{veg[0]} **最低 100 至 150 克** (建議以 {fat[0]} **{fat_qty}** {fat[2]} 烹調/拌沙拉)")
+                    meal_lines.append(f"{p_veg}蔬菜：{veg[0]} **最低 100 至 150 克** (建議以 {fat[0]} **{fat_qty}** {fat[2]} 烹調/拌沙拉)")
                 else:
-                    meal_lines.append(f"優質油脂/點心：{fat[0]} **{fat_qty}** {fat[2]}")
-                    meal_lines.append(f"蔬菜：{veg[0]} **最低 100 至 150 克** (生重約 1 至 1.5 份，確保纖維足夠)")
+                    meal_lines.append(f"{p_fat}優質油脂/點心：{fat[0]} **{fat_qty}** {fat[2]}")
+                    meal_lines.append(f"{p_veg}蔬菜：{veg[0]} **最低 100 至 150 克** (生重約 1 至 1.5 份，確保纖維足夠)")
                 
             meals[meal_name] = "  \n".join(meal_lines)
         
     return meals
 
-def generate_weekly_meal_plan(diet_type, target_calories, restrictions=None):
+def generate_weekly_meal_plan(diet_type, target_calories, restrictions=None, use_emoji=False):
     """生成週一至週日 (7天) 的生活型態菜單參考"""
     days = ["週一 (Mon)", "週二 (Tue)", "週三 (Wed)", "週四 (Thu)", "週五 (Fri)", "週六 (Sat)", "週日 (Sun)"]
     weekly_plan = {}
     for d in days:
-        weekly_plan[d] = generate_meal_plan(diet_type, target_calories, restrictions)
+        weekly_plan[d] = generate_meal_plan(diet_type, target_calories, restrictions, use_emoji=use_emoji)
     return weekly_plan
 
-def generate_exercise_plan(weight, activity_label, goal):
+def generate_exercise_plan(weight, activity_label, goal, use_emoji=False):
     """
     根據 WHO 與 ACSM (美國運動醫學會) 實證指引，提供非線性、符合人體運動生理學的生活活動處方。
     拒絕單純以卡路里線性外推，考量邊際效益遞減、關節保護與連續 vs 分段運動之生理差異。
@@ -229,24 +236,31 @@ def generate_exercise_plan(weight, activity_label, goal):
     # 4. ACSM 阻力訓練建議 (維持無脂肪體重，避免減脂期掉肌肉導致代謝降低)
     strength_focus = "徒手深蹲、分腿蹲、伏地挺身或核心棒式" if "久坐" in activity_label else "深蹲、硬舉、推胸與引體向上等大肌群多關節動作"
     
+    e_run = "🏃 " if use_emoji else ""
+    e_weight = "🏋️ " if use_emoji else ""
+    e_idea = "💡 " if use_emoji else ""
+    e_stairs = "🪜 " if use_emoji else ""
+    e_clock = "⏰ " if use_emoji else ""
+    e_science = "🔬 " if use_emoji else ""
+    
     return {
         "guideline_title": "WHO / ACSM 運動醫學指引：日常微活動 + 每週 150 分鐘心肺 + 2 天肌力維護",
         "option_a": (
             f"**每日步數目標：{target_steps} 步**  \n"
-            f"• **科學實證依據**：{steps_advice}  \n"
-            f"• **關節友善爬樓梯**：每日僅需累計 **{stairs_flights} 層樓**（如搭捷運或上班時走 1 至 2 段），嚴禁連續爬高樓或快速下樓，以保護髕骨股骨關節軟骨。  \n"
-            f"• **打破久坐習慣**：每連續坐姿 50 至 60 分鐘，務必起身走動伸展 2 至 3 分鐘，活化下肢大肌肉與微血管血流。"
+            f"• {e_idea}**科學實證依據**：{steps_advice}  \n"
+            f"• {e_stairs}**關節友善爬樓梯**：每日僅需累計 **{stairs_flights} 層樓**（如搭捷運或上班時走 1 至 2 段），嚴禁連續爬高樓或快速下樓，以保護髕骨股骨關節軟骨。  \n"
+            f"• {e_clock}**打破久坐習慣**：每連續坐姿 50 至 60 分鐘，務必起身走動伸展 2 至 3 分鐘，活化下肢大肌肉與微血管血流。"
         ),
         "option_b": (
             f"**心肺適能連續訓練：每次 {cardio_mins} 分鐘，每週 {cardio_days} 天**  \n"
-            f"• **建議形式**：戶外慢跑、操場快走、室內飛輪或游泳，強度維持在「微喘但仍能完整說話」的中等強度心率區間（最大心率的 64% 至 76%）。  \n"
-            f"• **運動生理學關鍵差異**：**單次連續 25 至 30 分鐘訓練**能持續刺激心肌收縮與粒線體密度，提升最大攝氧量 (VO₂max)；"
+            f"• {e_run}**建議形式**：戶外慢跑、操場快走、室內飛輪或游泳，強度維持在「微喘但仍能完整說話」的中等強度心率區間（最大心率的 64% 至 76%）。  \n"
+            f"• {e_science}**運動生理學關鍵差異**：**單次連續 25 至 30 分鐘訓練**能持續刺激心肌收縮與粒線體密度，提升最大攝氧量 (VO₂max)；"
             f"生活零碎快走雖能促進餐後血糖利用，但**對心肺耐力的長期結構性提升機制不同**，建議每週至少維持 2 至 3 次完整不中斷的連續運動！"
         ),
         "option_c": (
             f"**抗阻力與肌力維持：每週 2 至 3 天，每次 20 至 30 分鐘**  \n"
-            f"• **建議動作**：優先針對大肌群進行【{strength_focus}】，每組 8 至 12 下，進行 3 組。  \n"
-            f"• **代謝醫學核心**：減脂期人體傾向流失瘦肉組織。若僅死命做有氧，基礎代謝率將大幅下降並引發能量代償反彈；"
+            f"• {e_weight}**建議動作**：優先針對大肌群進行【{strength_focus}】，每組 8 至 12 下，進行 3 組。  \n"
+            f"• {e_idea}**代謝醫學核心**：減脂期人體傾向流失瘦肉組織。若僅死命做有氧，基礎代謝率將大幅下降並引發能量代償反彈；"
             f"**每週 2 次大肌群阻力訓練是守住基礎代謝率（BMR）與維持胰島素敏感度的最關鍵防線！**"
         )
     }
