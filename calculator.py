@@ -109,7 +109,7 @@ def calculate_bmi(weight, height):
     else:
         status = "重度肥胖"
         color = "#c0392b"
-        advice = "⚠️ 強烈建議至各大醫院之代謝或體重管理特別門診，由跨專科醫師團隊進行評估。"
+        advice = "強烈建議至各大醫院之代謝或體重管理特別門診，由跨專科醫師團隊進行評估。"
 
     ideal_min = round(18.5 * (height_m ** 2), 1)
     ideal_max = round(23.9 * (height_m ** 2), 1)

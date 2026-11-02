@@ -32,15 +32,15 @@ def main():
     
     # 3. 印出結果報告
     print("\n==============================")
-    print("📊 您的專屬健康數據報告 📊")
+    print("您的專屬健康數據報告")
     print("==============================")
     print(f"基礎代謝率 (BMR): {bmr:.1f} 大卡")
     print(f"每日總消耗量 (TDEE): {tdee:.1f} 大卡")
     print("------------------------------")
-    print(f"🎯 目標攝取熱量: {macros['target_calories']} 大卡")
-    print(f"🍚 碳水化合物: {macros['carbs_g']} 克")
-    print(f"🥩 蛋白質: {macros['protein_g']} 克")
-    print(f"🥑 脂肪: {macros['fat_g']} 克")
+    print(f"目標攝取熱量: {macros['target_calories']} 大卡")
+    print(f"碳水化合物: {macros['carbs_g']} 克")
+    print(f"蛋白質: {macros['protein_g']} 克")
+    print(f"脂肪: {macros['fat_g']} 克")
     print("==============================\n")
 
 if __name__ == "__main__":
